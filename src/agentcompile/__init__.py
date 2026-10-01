@@ -15,12 +15,13 @@ import inspect
 import os
 from typing import Any
 
+from ._capture import Capturer, flush_all
 from ._conversation import conversation
 from ._core import LIVE, SHADOW, Proxy, Router, async_create, sync_create
 from ._decide import AsyncDecider, Decider, Settings
 from ._trail import OnEvent, Trail
 
-__all__ = ["LIVE", "SHADOW", "conversation", "wrap"]
+__all__ = ["LIVE", "SHADOW", "Settings", "conversation", "flush", "wrap"]
 try:
     from ._version import __version__
 except ImportError:  # running from a source checkout that was never built
@@ -40,6 +41,7 @@ def wrap(
     on_event: OnEvent | None = None,
     company: str | None = None,
     http_client: Any = None,
+    capture: bool | None = None,
 ) -> Any:
     """Wrap an OpenAI- or Anthropic-style client; returns an object you use exactly like it.
 
@@ -47,6 +49,8 @@ def wrap(
     mode: "live" answers known jobs; "shadow" decides but always calls your model, so you can
     see what it would have done. timeout: seconds to wait for a decision before failing open.
     trail: a path, True for ~/.agentcompile/trail.jsonl, or False. on_event: called per call.
+    capture: send each call's request and answer to AgentCompile in the background, so it can
+    find the jobs your agent repeats (opt-in; or AGENTCOMPILE_CAPTURE=1). Never slows a call.
     """
     settings = Settings(
         base_url=base_url or os.environ.get("AGENTCOMPILE_URL", DEFAULT_URL),
@@ -55,6 +59,14 @@ def wrap(
         timeout=timeout,
     )
     the_trail = Trail(trail, on_event)
+    if capture is None:
+        capture = os.environ.get("AGENTCOMPILE_CAPTURE", "") in ("1", "true", "yes")
+    # One sender per wrapped client; it always sends from its own thread (sync client).
+    capturer = (
+        Capturer(settings, http_client if _is_sync_http(http_client) else None)
+        if capture
+        else None
+    )
 
     chat = getattr(client, "chat", None)
     completions = getattr(chat, "completions", None)
@@ -62,6 +74,7 @@ def wrap(
         from . import _openai
 
         router = _router("openai", completions.create, settings, the_trail, mode, http_client)
+        router.capturer = capturer
         create = _create(router, completions.create, _openai.build)
         return Proxy(
             client,
@@ -73,10 +86,16 @@ def wrap(
         from . import _anthropic
 
         router = _router("anthropic", messages.create, settings, the_trail, mode, http_client)
+        router.capturer = capturer
         create = _create(router, messages.create, _anthropic.build)
         return Proxy(client, {"messages": Proxy(messages, {"create": create})})
 
     raise TypeError("agentcompile.wrap expects an OpenAI- or Anthropic-style client")
+
+
+def flush(timeout: float = 5.0) -> None:
+    """Send every captured call still queued (short scripts and tests; also runs at exit)."""
+    flush_all(timeout)
 
 
 def _router(
@@ -96,6 +115,12 @@ def _create(router: Router, original: Any, build: Any) -> Any:
         if _is_async(original)
         else sync_create(router, original, build)
     )
+
+
+def _is_sync_http(http_client: Any) -> bool:
+    """Any client with a plain (not async) post(): httpx, httpx2, a test client."""
+    post = getattr(http_client, "post", None)
+    return post is not None and not inspect.iscoroutinefunction(inspect.unwrap(post))
 
 
 def _is_async(fn: Any) -> bool:
