@@ -1,5 +1,7 @@
 # agentcompile
 
+[![PyPI](https://img.shields.io/pypi/v/agentcompile)](https://pypi.org/project/agentcompile/) [![Python](https://img.shields.io/pypi/pyversions/agentcompile)](https://pypi.org/project/agentcompile/) [![CI](https://github.com/kbhatnagar1506/agentcompile-python/actions/workflows/ci.yml/badge.svg)](https://github.com/kbhatnagar1506/agentcompile-python/actions/workflows/ci.yml) [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+
 ```
 pip install agentcompile
 ```
