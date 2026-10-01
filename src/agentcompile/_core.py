@@ -16,9 +16,12 @@ LIVE, SHADOW = "live", "shadow"
 class Router:
     """Holds the decision client, the trail and the mode for one wrapped client."""
 
-    def __init__(self, provider: str, decider: Any, trail: Trail, mode: str) -> None:
+    def __init__(
+        self, provider: str, decider: Any, trail: Trail, mode: str, capturer: Any = None
+    ) -> None:
         if mode not in (LIVE, SHADOW):
             raise ValueError("mode must be 'live' or 'shadow'")
+        self.capturer = capturer
         self.provider = provider
         self.decider = decider
         self.trail = trail
@@ -43,6 +46,12 @@ class Router:
         if self.mode == SHADOW:
             return "shadow", None
         return "compiled", decision
+
+    def capture(
+        self, conversation_id: str | None, kwargs: dict[str, Any], result: Any, stream: bool
+    ) -> None:
+        if self.capturer is not None:
+            self.capturer.add(self.provider, conversation_id, kwargs, result, stream)
 
     def record(
         self,
@@ -103,8 +112,10 @@ def sync_create(
                     started=started,
                     stream=stream,
                 )
+                router.capture(conversation_id, real_kwargs, result, stream)
                 return result
         result = original(*args, **real_kwargs)
+        router.capture(conversation_id, real_kwargs, result, stream)
         router.record(
             route=route,
             conversation_id=conversation_id,
@@ -149,8 +160,10 @@ def async_create(
                     started=started,
                     stream=stream,
                 )
+                router.capture(conversation_id, real_kwargs, result, stream)
                 return result
         result = await original(*args, **real_kwargs)
+        router.capture(conversation_id, real_kwargs, result, stream)
         router.record(
             route=route,
             conversation_id=conversation_id,
