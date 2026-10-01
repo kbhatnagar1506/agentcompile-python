@@ -20,6 +20,7 @@ import httpx
 
 from ._decide import CONVERSATION_HEADER, Settings, _request
 from ._payload import jsonable, payload
+from ._scrub import scrub_call
 
 MAX_QUEUE = 2000
 BATCH = 50
@@ -35,8 +36,15 @@ def flush_all(timeout: float = 5.0) -> None:
 
 
 class Capturer:
-    def __init__(self, settings: Settings, http: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        http: httpx.Client | None = None,
+        scrub_key: bytes | None = None,
+    ) -> None:
         self.settings = settings
+        # None: send as is (scrub=False). Otherwise personal data is tokenized before queueing.
+        self.scrub_key = scrub_key
         self._http = http
         self._queue: collections.deque[dict[str, Any]] = collections.deque(maxlen=MAX_QUEUE)
         self._lock = threading.Lock()
@@ -59,13 +67,19 @@ class Capturer:
         """Queue one call. Never raises. A streamed answer is not captured yet: the record
         keeps the request and says so."""
         try:
+            request, answer = payload(kwargs), None if stream else jsonable(response)
+            if self.scrub_key is not None:
+                request = scrub_call(request, self.scrub_key)
+                answer = scrub_call(answer, self.scrub_key)
             record = {
                 "provider": provider,
                 "conversation_id": conversation_id,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
-                "request": payload(kwargs),
-                "response": None if stream else jsonable(response),
+                "request": request,
+                "response": answer,
             }
+            if self.scrub_key is not None:
+                record["scrubbed"] = True
             if stream:
                 record["stream"] = True
             with self._lock:

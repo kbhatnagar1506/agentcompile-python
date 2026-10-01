@@ -19,6 +19,7 @@ from ._capture import Capturer, flush_all
 from ._conversation import conversation
 from ._core import LIVE, SHADOW, Proxy, Router, async_create, sync_create
 from ._decide import AsyncDecider, Decider, Settings
+from ._scrub import load_key
 from ._trail import OnEvent, Trail
 
 __all__ = ["LIVE", "SHADOW", "Settings", "conversation", "flush", "wrap"]
@@ -42,6 +43,7 @@ def wrap(
     company: str | None = None,
     http_client: Any = None,
     capture: bool | None = None,
+    scrub: bool = True,
 ) -> Any:
     """Wrap an OpenAI- or Anthropic-style client; returns an object you use exactly like it.
 
@@ -51,6 +53,9 @@ def wrap(
     trail: a path, True for ~/.agentcompile/trail.jsonl, or False. on_event: called per call.
     capture: send each call's request and answer to AgentCompile in the background, so it can
     find the jobs your agent repeats (opt-in; or AGENTCOMPILE_CAPTURE=1). Never slows a call.
+    scrub: with capture, turn emails, cards, phones and account numbers into keyed tokens on
+    this machine before anything is sent (default True; the key is AGENTCOMPILE_SCRUB_KEY or
+    one created once in ~/.agentcompile/).
     """
     settings = Settings(
         base_url=base_url or os.environ.get("AGENTCOMPILE_URL", DEFAULT_URL),
@@ -63,7 +68,11 @@ def wrap(
         capture = os.environ.get("AGENTCOMPILE_CAPTURE", "") in ("1", "true", "yes")
     # One sender per wrapped client; it always sends from its own thread (sync client).
     capturer = (
-        Capturer(settings, http_client if _is_sync_http(http_client) else None)
+        Capturer(
+            settings,
+            http_client if _is_sync_http(http_client) else None,
+            load_key() if scrub else None,
+        )
         if capture
         else None
     )
