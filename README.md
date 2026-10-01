@@ -54,6 +54,10 @@ agentcompile trail -f       # follow live
 
 Your AgentCompile key (`ack_...`) identifies your company by itself. We show it once and store only its hash; a new key revokes the old one. AgentCompile is pre-launch: to get a key, write to founders@tryagentcompile.com.
 
+## Releasing
+
+Commit with conventional messages (`fix: ...` is a patch, `feat: ...` a minor version, `feat!: ...` a major one). A release PR stays open with the next version and its changelog; merging it tags the release and publishes it to PyPI. The version always comes from the git tag.
+
 ## Development
 
 ```

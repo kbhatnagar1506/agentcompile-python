@@ -5,3 +5,4 @@ build/
 .venv/
 .pytest_cache/
 .ruff_cache/
+src/agentcompile/_version.py

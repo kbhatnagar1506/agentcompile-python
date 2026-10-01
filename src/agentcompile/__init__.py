@@ -21,7 +21,10 @@ from ._decide import AsyncDecider, Decider, Settings
 from ._trail import OnEvent, Trail
 
 __all__ = ["LIVE", "SHADOW", "conversation", "wrap"]
-__version__ = "0.1.0"
+try:
+    from ._version import __version__
+except ImportError:  # running from a source checkout that was never built
+    __version__ = "0.0.0"
 
 DEFAULT_URL = "https://api.tryagentcompile.com"
 
