@@ -1,0 +1,141 @@
+{
+ "key": "test-key-0123456789abcdef",
+ "text": [
+  {
+   "input": "my email is Mia.Garcia2723@Example.com, thanks",
+   "output": "my email is <email:c3009e1a>, thanks"
+  },
+  {
+   "input": "card 4111 1111 1111 1111 and 4111-1111-1111-1111 and 4111111111111111",
+   "output": "card <card:632ac038> and <card:632ac038> and <card:632ac038>"
+  },
+  {
+   "input": "not a card: 1234567812345678",
+   "output": "not a card: 1234567812345678"
+  },
+  {
+   "input": "call +44 20 7946 0958 or (415) 555-0199 or 415.555.0199 or 415-555-0199 or +14155550199",
+   "output": "call <phone:064e0e83> or <phone:90f6ee96> or <phone:90f6ee96> or <phone:90f6ee96> or <phone:c3e1a941>"
+  },
+  {
+   "input": "order #W1234567 placed 2024-05-27, ids 1684786391 5052031638",
+   "output": "order #W1234567 placed 2024-05-27, ids 1684786391 5052031638"
+  },
+  {
+   "input": "price 1234567890.12 and plain 4155550199",
+   "output": "price 1234567890.12 and plain 4155550199"
+  },
+  {
+   "input": "no personal data here",
+   "output": "no personal data here"
+  },
+  {
+   "input": "two emails a@b.com and A@B.COM",
+   "output": "two emails <email:8e2d378c> and <email:8e2d378c>"
+  }
+ ],
+ "value": [
+  {
+   "input": {
+    "email": "x@y.io",
+    "order_id": "4111111111111111",
+    "phone": "4155550199",
+    "card_number": "4111111111111111"
+   },
+   "output": {
+    "email": "<email:f694e29d>",
+    "order_id": "4111111111111111",
+    "phone": "<phone:90f6ee96>",
+    "card_number": "<card:632ac038>"
+   }
+  },
+  {
+   "input": {
+    "account_number": "000123456789",
+    "iban": "GB82WEST12345698765432",
+    "note": "reach me at 415-555-0199"
+   },
+   "output": {
+    "account_number": "<account:c76f39dd>",
+    "iban": "<account:71d12696>",
+    "note": "reach me at <phone:90f6ee96>"
+   }
+  },
+  {
+   "input": {
+    "items": [
+     {
+      "sku": "4111111111111111",
+      "contact": "+1 415 555 0199"
+     }
+    ],
+    "mobile": 4155550199,
+    "cc": 4111111111111111
+   },
+   "output": {
+    "items": [
+     {
+      "sku": "4111111111111111",
+      "contact": "<phone:c3e1a941>"
+     }
+    ],
+    "mobile": "<phone:90f6ee96>",
+    "cc": "<card:632ac038>"
+   }
+  },
+  {
+   "input": {
+    "user": {
+     "emails": [
+      "p@q.co",
+      "not-an-email"
+     ],
+     "ts": "1684786391"
+    }
+   },
+   "output": {
+    "user": {
+     "emails": [
+      "<email:6d5048ea>",
+      "not-an-email"
+     ],
+     "ts": "1684786391"
+    }
+   }
+  },
+  {
+   "input": [
+    1,
+    2.5,
+    true,
+    null,
+    "plain"
+   ],
+   "output": [
+    1,
+    2.5,
+    true,
+    null,
+    "plain"
+   ]
+  }
+ ],
+ "tool_output": [
+  {
+   "input": "{\"user_id\": \"u1\", \"email\": \"mia@example.com\", \"phone\": \"415-555-0199\"}",
+   "output": "{\"user_id\": \"u1\", \"email\": \"<email:d38e6252>\", \"phone\": \"<phone:90f6ee96>\"}"
+  },
+  {
+   "input": "{\"a\":1,\"card\":\"4111111111111111\"}",
+   "output": "{\"a\":1,\"card\":\"<card:632ac038>\"}"
+  },
+  {
+   "input": "not json: mail me@x.org",
+   "output": "not json: mail <email:f98f3b2e>"
+  },
+  {
+   "input": "[{\"order_id\":\"#W1\",\"payment\":{\"card_number\":\"4111 1111 1111 1111\"}}]",
+   "output": "[{\"order_id\":\"#W1\",\"payment\":{\"card_number\":\"<card:632ac038>\"}}]"
+  }
+ ]
+}

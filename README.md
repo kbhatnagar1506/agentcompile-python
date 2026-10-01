@@ -66,3 +66,13 @@ Commit with conventional messages (`fix: ...` is a patch, `feat: ...` a minor ve
 pip install -e ".[dev]"
 pytest tests
 ```
+
+## Privacy
+
+With `capture=True`, personal data is scrubbed on your machine before anything is sent:
+emails, payment cards, phone numbers and account numbers become keyed tokens
+(`<email:3f9a1c2e>`), the same value always giving the same token, so AgentCompile can still
+match values across a conversation without seeing them. The key stays with you:
+`AGENTCOMPILE_SCRUB_KEY` (set the same one on all your servers), else one created once in
+`~/.agentcompile/scrub.key`. `scrub=False` turns it off. Live decisions (`/v1/decide`) need
+real values to act on a customer's request; they are used in memory and stored scrubbed.
