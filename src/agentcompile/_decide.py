@@ -22,12 +22,17 @@ class Decision:
     call_id: str | None = None
     text: str | None = None
     reason: str | None = None
+    # What AgentCompile decided along the way (which job, what it asked, why it handed
+    # off), as the server reported it: kept so the trail can show it.
+    events: tuple[dict[str, Any], ...] = ()
 
     @classmethod
     def parse(cls, body: Any) -> Decision | None:
         if not isinstance(body, dict):
             return None
         action = body.get("action")
+        raw = body.get("events")
+        events = tuple(e for e in (raw if isinstance(raw, list) else []) if isinstance(e, dict))
         if (
             action == "tool_call"
             and isinstance(body.get("tool"), str)
@@ -38,11 +43,12 @@ class Decision:
                 tool=body["tool"],
                 args=body["args"],
                 call_id=str(body.get("call_id") or ""),
+                events=events,
             )
         if action == "say" and isinstance(body.get("text"), str):
-            return cls(action, text=body["text"])
+            return cls(action, text=body["text"], events=events)
         if action == "forward":
-            return cls(action, reason=str(body.get("reason") or ""))
+            return cls(action, reason=str(body.get("reason") or ""), events=events)
         return None
 
 
