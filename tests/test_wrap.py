@@ -322,3 +322,12 @@ def test_the_trail_command_prints_a_summary(
         "compiled" in out
         and "2 calls: compiled 1, forwarded 1. Model calls avoided: 1 (50%)." in out
     )
+
+
+def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    from agentcompile.cli import main
+
+    with pytest.raises(SystemExit) as done:
+        main(["--version"])
+    assert done.value.code == 0
+    assert capsys.readouterr().out.startswith("agentcompile ")

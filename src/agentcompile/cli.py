@@ -11,6 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from . import __version__
 from ._trail import DEFAULT_PATH
 
 COLORS = {
@@ -63,6 +64,7 @@ def summary(rows: list) -> str:
 
 def main(argv: Any = None) -> int:
     parser = argparse.ArgumentParser(prog="agentcompile")
+    parser.add_argument("--version", action="version", version=f"agentcompile {__version__}")
     sub = parser.add_subparsers(dest="cmd", required=True)
     t = sub.add_parser("trail", help="show the trail of model calls")
     t.add_argument("-f", "--follow", action="store_true", help="keep printing new calls")
