@@ -23,7 +23,7 @@ from ._trail import OnEvent, Trail
 __all__ = ["LIVE", "SHADOW", "conversation", "wrap"]
 __version__ = "0.1.0"
 
-DEFAULT_URL = "https://api.agentcompile.com"
+DEFAULT_URL = "https://api.tryagentcompile.com"
 
 
 def wrap(

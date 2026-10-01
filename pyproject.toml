@@ -9,7 +9,13 @@ description = "Wrap your agent's model client: repeated jobs run compiled, every
 readme = "README.md"
 requires-python = ">=3.9"
 license = "Apache-2.0"
+authors = [{ name = "AgentCompile", email = "founders@tryagentcompile.com" }]
+classifiers = ["Development Status :: 3 - Alpha", "Programming Language :: Python :: 3", "Intended Audience :: Developers", "Topic :: Software Development :: Libraries"]
+
 dependencies = ["httpx>=0.25"]
+
+[project.urls]
+Homepage = "https://tryagentcompile.com"
 
 [project.optional-dependencies]
 openai = ["openai>=1.0"]

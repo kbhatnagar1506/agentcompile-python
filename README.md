@@ -1,4 +1,8 @@
-# agentcompile (Python SDK)
+# agentcompile
+
+```
+pip install agentcompile
+```
 
 Wrap your agent's model client. Jobs your agent repeats run compiled, with no model call; everything else goes to your model unchanged, with your own provider key.
 
@@ -48,11 +52,11 @@ agentcompile trail -f       # follow live
 
 ## Keys
 
-`agent-compiler endpoint-key --company <name>` issues a key of the form `ack_<company>.<secret>`. It's shown once, and only its hash is stored. The key alone identifies the company; issuing a new one revokes the old.
+Your AgentCompile key (`ack_...`) identifies your company by itself. We show it once and store only its hash; a new key revokes the old one. AgentCompile is pre-launch: to get a key, write to founders@tryagentcompile.com.
 
 ## Development
 
 ```
-pip install -e "sdk/python[dev]"
-pytest sdk/python/tests
+pip install -e ".[dev]"
+pytest tests
 ```
