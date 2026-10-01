@@ -65,6 +65,7 @@ class Router:
             tool=decision.tool if decision else None,
             reason=(decision.reason if decision and decision.action == "forward" else None)
             or error,
+            events=list(decision.events) if decision and decision.events else None,
             decide_ms=round(decide_ms, 1) if decide_ms is not None else None,
             total_ms=round((time.perf_counter() - started) * 1000, 1),
             stream=stream or None,

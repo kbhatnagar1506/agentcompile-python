@@ -169,6 +169,27 @@ def test_forward_calls_the_model_with_our_keyword_removed(tmp_path: Path) -> Non
     assert event["route"] == "forwarded" and event["reason"] == "no job matched"
 
 
+def test_the_trail_keeps_what_agentcompile_decided_along_the_way(tmp_path: Path) -> None:
+    events = [
+        {"decision": "activate_recipe", "recipe": "cancel_order"},
+        {"decision": "forward", "reason": "the customer asked a question"},
+    ]
+    fake = Fake({**FORWARD, "events": events})
+    _openai(fake, tmp_path).chat.completions.create(
+        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+    )
+    assert _trail(tmp_path)[0]["events"] == events
+
+
+def test_malformed_events_are_dropped_not_fatal(tmp_path: Path) -> None:
+    fake = Fake({**CALL, "events": ["not a dict", {"decision": "emit_read"}]})
+    _openai(fake, tmp_path).chat.completions.create(
+        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+    )
+    event = _trail(tmp_path)[0]
+    assert event["route"] == "compiled" and event["events"] == [{"decision": "emit_read"}]
+
+
 @pytest.mark.parametrize(
     "fake",
     [
