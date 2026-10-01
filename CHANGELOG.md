@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/kbhatnagar1506/agentcompile-python/compare/v0.2.0...v0.2.1) (2026-10-01)
+
+
+### Bug Fixes
+
+* keep AgentCompile's decision events in the trail ([#5](https://github.com/kbhatnagar1506/agentcompile-python/issues/5)) ([944c178](https://github.com/kbhatnagar1506/agentcompile-python/commit/944c178e5121f3389041335e36cee06a7f80e441))
+
 ## [0.2.0](https://github.com/kbhatnagar1506/agentcompile-python/compare/agentcompile-v0.1.0...agentcompile-v0.2.0) (2026-10-01)
 
 
