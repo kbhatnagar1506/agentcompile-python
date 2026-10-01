@@ -67,6 +67,25 @@ pip install -e ".[dev]"
 pytest tests
 ```
 
+## Outcomes and customers
+
+Tell AgentCompile how a conversation ended, so it learns only from the ones that went well:
+
+```python
+agentcompile.outcome(ticket.id, "resolved")  # or escalated, unresolved, abandoned, reopened, complaint
+```
+
+Pass a stable customer id so repeat jobs are counted per customer (scrubbed like everything
+else when capture is on):
+
+```python
+with agentcompile.conversation(ticket.id, customer=ticket.customer_id):
+    run_agent()
+```
+
+Streamed answers are captured too: your agent reads the stream as always, and the whole answer
+is captured once it ends.
+
 ## Privacy
 
 With `capture=True`, personal data is scrubbed on your machine before anything is sent:

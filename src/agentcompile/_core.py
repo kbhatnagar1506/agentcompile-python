@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import contextvars
 import time
 from typing import Any, Callable
 
-from ._conversation import current
+from ._assemble import AsyncCapturingStream, CapturingStream
+from ._conversation import current, current_customer
 from ._decide import Decision
 from ._payload import payload
 from ._trail import Trail
@@ -22,15 +24,20 @@ class Router:
         if mode not in (LIVE, SHADOW):
             raise ValueError("mode must be 'live' or 'shadow'")
         self.capturer = capturer
+        self._customer: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+            "agentcompile_call_customer", default=None
+        )
         self.provider = provider
         self.decider = decider
         self.trail = trail
         self.mode = mode
 
     def prepare(self, kwargs: dict[str, Any]) -> tuple[str | None, dict[str, Any]]:
-        """(conversation id, kwargs for the real call): our keyword never reaches the model."""
+        """(conversation id, kwargs for the real call): our keywords never reach the model.
+        The customer id rides along for capture only."""
         kwargs = dict(kwargs)
         conversation_id = kwargs.pop("conversation_id", None) or current()
+        self._customer.set(kwargs.pop("customer_id", None) or current_customer())
         return conversation_id, kwargs
 
     def plan(
@@ -48,10 +55,27 @@ class Router:
         return "compiled", decision
 
     def capture(
-        self, conversation_id: str | None, kwargs: dict[str, Any], result: Any, stream: bool
-    ) -> None:
-        if self.capturer is not None:
-            self.capturer.add(self.provider, conversation_id, kwargs, result, stream)
+        self,
+        conversation_id: str | None,
+        kwargs: dict[str, Any],
+        result: Any,
+        stream: bool,
+        is_async: bool = False,
+    ) -> Any:
+        """Queue the call for capture; returns the result to hand back (a stream comes back
+        wrapped, so its answer is captured once the agent has read it)."""
+        if self.capturer is None:
+            return result
+        customer = self._customer.get()
+        if not stream:
+            self.capturer.add(self.provider, conversation_id, kwargs, result, customer=customer)
+            return result
+        capturer, provider = self.capturer, self.provider
+
+        def done(chunks: list[Any], complete: bool) -> None:
+            capturer.add_stream(provider, conversation_id, kwargs, chunks, complete, customer)
+
+        return (AsyncCapturingStream if is_async else CapturingStream)(result, done)
 
     def record(
         self,
@@ -112,10 +136,9 @@ def sync_create(
                     started=started,
                     stream=stream,
                 )
-                router.capture(conversation_id, real_kwargs, result, stream)
-                return result
+                return router.capture(conversation_id, real_kwargs, result, stream)
         result = original(*args, **real_kwargs)
-        router.capture(conversation_id, real_kwargs, result, stream)
+        result = router.capture(conversation_id, real_kwargs, result, stream)
         router.record(
             route=route,
             conversation_id=conversation_id,
@@ -160,10 +183,9 @@ def async_create(
                     started=started,
                     stream=stream,
                 )
-                router.capture(conversation_id, real_kwargs, result, stream)
-                return result
+                return router.capture(conversation_id, real_kwargs, result, stream, True)
         result = await original(*args, **real_kwargs)
-        router.capture(conversation_id, real_kwargs, result, stream)
+        result = router.capture(conversation_id, real_kwargs, result, stream, True)
         router.record(
             route=route,
             conversation_id=conversation_id,
