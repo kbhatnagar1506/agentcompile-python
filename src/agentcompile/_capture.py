@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import atexit
 import collections
+import json
 import threading
 import time
 from datetime import datetime, timezone
@@ -25,15 +26,33 @@ from ._scrub import scrub_call, scrub_value
 
 MAX_QUEUE = 2000
 BATCH = 50
+# The server takes up to 8 MiB a request: batches stay under 4 MiB, and a call bigger than
+# MAX_RECORD_BYTES on its own (a huge history) is dropped and counted.
+MAX_BATCH_BYTES = 4 * 1024 * 1024
+MAX_RECORD_BYTES = 7 * 1024 * 1024
 INTERVAL = 1.0
 
 
-_ALL: list[Capturer] = []
+_ALL: dict[tuple[Any, ...], Capturer] = {}
+_ALL_LOCK = threading.Lock()
 
 
 def flush_all(timeout: float = 5.0) -> None:
-    for capturer in list(_ALL):
+    for capturer in list(_ALL.values()):
         capturer.flush(timeout)
+
+
+def capturer_for(
+    settings: Settings, http: httpx.Client | None, scrub_key: bytes | None
+) -> Capturer:
+    """One sender (one queue, one thread) per destination: wrapping a client per request, as
+    some apps do, reuses it instead of starting another each time."""
+    key = (settings.base_url, settings.key, settings.company, scrub_key, id(http))
+    with _ALL_LOCK:
+        found = _ALL.get(key)
+        if found is None:
+            found = _ALL[key] = Capturer(settings, http, scrub_key)
+        return found
 
 
 class Capturer:
@@ -55,7 +74,6 @@ class Capturer:
         self.dropped = 0
         self.failed = 0
         atexit.register(self.flush, 2.0)
-        _ALL.append(self)
 
     def add(
         self,
@@ -144,18 +162,43 @@ class Capturer:
             while self._queue:
                 self._send_batch()
 
-    def _send_batch(self) -> None:
+    def _take(self) -> list[str]:
+        """Up to BATCH queued calls, encoded, under MAX_BATCH_BYTES together (the first one
+        alone may be up to MAX_RECORD_BYTES); what doesn't fit goes back to the front."""
         with self._lock:
-            batch = [self._queue.popleft() for _ in range(min(BATCH, len(self._queue)))]
+            records = [self._queue.popleft() for _ in range(min(BATCH, len(self._queue)))]
+        batch: list[str] = []
+        size = 0
+        for i, record in enumerate(records):
+            try:
+                line = json.dumps(record, default=str)
+            except Exception:
+                self.dropped += 1
+                continue
+            if len(line) > MAX_RECORD_BYTES:
+                self.dropped += 1
+                continue
+            if batch and size + len(line) > MAX_BATCH_BYTES:
+                with self._lock:  # the rest waits for the next batch, in order
+                    self._queue.extendleft(reversed(records[i:]))
+                break
+            batch.append(line)
+            size += len(line)
+        return batch
+
+    def _send_batch(self) -> None:
+        batch = self._take()
         if not batch:
             return
-        url, headers, _ = _request(self.settings, batch[0]["provider"], "capture", {})
+        url, headers, _ = _request(self.settings, "openai", "capture", {})
         headers.pop(CONVERSATION_HEADER, None)
+        headers["content-type"] = "application/json"
         url = url.rsplit("/v1/decide", 1)[0] + "/v1/capture"
         try:
             if self._http is None:
                 self._http = httpx.Client(timeout=self.settings.timeout)
-            response = self._http.post(url, headers=headers, json={"exchanges": batch})
+            body = '{"exchanges": [' + ", ".join(batch) + "]}"
+            response = self._http.post(url, headers=headers, content=body.encode("utf-8"))
             if response.status_code == 200:
                 self.sent += len(batch)
             else:

@@ -15,6 +15,46 @@ from ._trail import Trail
 LIVE, SHADOW = "live", "shadow"
 
 
+def _given(value: Any) -> Any:
+    """None for an argument left out, however the SDK spells that (NOT_GIVEN, omit)."""
+    return None if type(value).__name__ in ("NotGiven", "Omit") else value
+
+
+def unsupported(kwargs: dict[str, Any]) -> str | None:
+    """Why a compiled answer couldn't honour this request (then it goes to the model, and no
+    decision is asked for): several answers, a forced or forbidden tool, a fixed output
+    shape."""
+    n = _given(kwargs.get("n"))
+    if n is not None and n != 1:
+        return "n"
+    if _given(kwargs.get("functions")) is not None:
+        return "functions"
+    shape = _given(kwargs.get("response_format"))
+    if shape is not None and not (isinstance(shape, dict) and shape.get("type") == "text"):
+        return "response_format"
+    choice = _given(kwargs.get("tool_choice"))
+    auto = choice in (None, "auto") or (
+        isinstance(choice, dict) and choice.get("type") == "auto"
+    )
+    if not auto:
+        return "tool_choice"
+    return None
+
+
+def offered(kwargs: dict[str, Any], tool: str | None) -> bool:
+    """Whether the request offers `tool` (OpenAI's {"function": {"name"}}, or a top-level
+    name)."""
+    for spec in _given(kwargs.get("tools")) or []:
+        spec = spec.model_dump() if hasattr(spec, "model_dump") else spec
+        if not isinstance(spec, dict):
+            continue
+        function = spec.get("function")
+        name = function.get("name") if isinstance(function, dict) else spec.get("name")
+        if name == tool:
+            return True
+    return False
+
+
 class Router:
     """Holds the decision client, the trail and the mode for one wrapped client."""
 
@@ -41,18 +81,27 @@ class Router:
         return conversation_id, kwargs
 
     def plan(
-        self, conversation_id: str | None, decision: Decision | None, error: str | None
-    ) -> tuple[str, Decision | None]:
-        """(route, the decision to answer with or None to forward)."""
+        self,
+        conversation_id: str | None,
+        decision: Decision | None,
+        error: str | None,
+        kwargs: dict[str, Any] | None = None,
+    ) -> tuple[str, Decision | None, str | None]:
+        """(route, the decision to answer with or None to forward, error text)."""
         if conversation_id is None:
-            return "no-conversation", None
+            return "no-conversation", None, error
+        if kwargs is not None and (why := unsupported(kwargs)) is not None:
+            return "unsupported", None, why
         if decision is None:
-            return "fail-open", None
+            return "fail-open", None, error
         if decision.action == "forward":
-            return "forwarded", None
+            return "forwarded", None, error
         if self.mode == SHADOW:
-            return "shadow", None
-        return "compiled", decision
+            return "shadow", None, error
+        if decision.action == "tool_call" and not offered(kwargs or {}, decision.tool):
+            # A tool the agent didn't offer this turn: its loop couldn't run it.
+            return "fail-open", None, "tool not offered"
+        return "compiled", decision, error
 
     def capture(
         self,
@@ -112,11 +161,11 @@ def sync_create(
         started = time.perf_counter()
         conversation_id, real_kwargs = router.prepare(kwargs)
         decision = decide_ms = error = None
-        if conversation_id is not None:
+        if conversation_id is not None and unsupported(real_kwargs) is None:
             decision, decide_ms, error = router.decider.decide(
                 router.provider, conversation_id, payload(real_kwargs)
             )
-        route, answer = router.plan(conversation_id, decision, error)
+        route, answer, error = router.plan(conversation_id, decision, error, real_kwargs)
         stream = bool(real_kwargs.get("stream"))
         if answer is not None:
             try:
@@ -161,11 +210,11 @@ def async_create(
         started = time.perf_counter()
         conversation_id, real_kwargs = router.prepare(kwargs)
         decision = decide_ms = error = None
-        if conversation_id is not None:
+        if conversation_id is not None and unsupported(real_kwargs) is None:
             decision, decide_ms, error = await router.decider.decide(
                 router.provider, conversation_id, payload(real_kwargs)
             )
-        route, answer = router.plan(conversation_id, decision, error)
+        route, answer, error = router.plan(conversation_id, decision, error, real_kwargs)
         stream = bool(real_kwargs.get("stream"))
         if answer is not None:
             try:

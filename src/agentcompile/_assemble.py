@@ -101,8 +101,9 @@ class CapturingStream:
         self._on_done = on_done
         self._chunks: list[Any] = []
         self._finished = False
+        self._it = self._iterate()  # one pass, shared by `for` and next()
 
-    def __iter__(self) -> Iterator[Any]:
+    def _iterate(self) -> Iterator[Any]:
         complete = False
         try:
             for item in self._stream:
@@ -111,6 +112,12 @@ class CapturingStream:
             complete = True
         finally:
             self._finish(complete=complete)
+
+    def __iter__(self) -> Iterator[Any]:
+        return self._it
+
+    def __next__(self) -> Any:
+        return next(self._it)
 
     def __enter__(self) -> CapturingStream:
         enter = getattr(self._stream, "__enter__", None)
@@ -146,6 +153,7 @@ class AsyncCapturingStream:
         self._on_done = on_done
         self._chunks: list[Any] = []
         self._finished = False
+        self._it = self._iterate()
 
     async def _iterate(self) -> AsyncIterator[Any]:
         complete = False
@@ -158,7 +166,10 @@ class AsyncCapturingStream:
             self._finish(complete=complete)
 
     def __aiter__(self) -> AsyncIterator[Any]:
-        return self._iterate()
+        return self._it
+
+    async def __anext__(self) -> Any:
+        return await self._it.__anext__()
 
     async def __aenter__(self) -> AsyncCapturingStream:
         enter = getattr(self._stream, "__aenter__", None)

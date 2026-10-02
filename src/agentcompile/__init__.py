@@ -15,7 +15,7 @@ import inspect
 import os
 from typing import Any
 
-from ._capture import Capturer, flush_all
+from ._capture import capturer_for, flush_all
 from ._conversation import conversation
 from ._core import LIVE, SHADOW, Proxy, Router, async_create, sync_create
 from ._decide import AsyncDecider, Decider, Settings
@@ -65,6 +65,7 @@ def wrap(
         key=key or os.environ.get("AGENTCOMPILE_KEY"),
         company=company or os.environ.get("AGENTCOMPILE_COMPANY"),
         timeout=timeout,
+        mode=mode,
     )
     the_trail = Trail(trail, on_event)
     _remember(settings)  # outcome() sends with the client wrapped last
@@ -72,7 +73,7 @@ def wrap(
         capture = os.environ.get("AGENTCOMPILE_CAPTURE", "") in ("1", "true", "yes")
     # One sender per wrapped client; it always sends from its own thread (sync client).
     capturer = (
-        Capturer(
+        capturer_for(
             settings,
             http_client if _is_sync_http(http_client) else None,
             load_key() if scrub else None,

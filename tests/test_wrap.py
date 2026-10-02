@@ -134,6 +134,13 @@ def _trail(tmp_path: Path) -> list[dict[str, Any]]:
 
 
 MESSAGES = [{"role": "user", "content": "cancel order #W1"}]
+TOOLS = [
+    {
+        "type": "function",
+        "function": {"name": "get_order_details", "parameters": {"type": "object"}},
+    }
+]
+ANTHROPIC_TOOLS = [{"name": "get_order_details", "input_schema": {"type": "object"}}]
 
 
 def test_a_compiled_tool_call_is_a_real_chat_completion_and_the_model_is_not_called(
@@ -142,7 +149,7 @@ def test_a_compiled_tool_call_is_a_real_chat_completion_and_the_model_is_not_cal
     fake = Fake(CALL)
     client = _openai(fake, tmp_path)
     resp = client.chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     call = resp.choices[0].message.tool_calls[0]
     assert resp.choices[0].finish_reason == "tool_calls"
@@ -161,7 +168,7 @@ def test_a_compiled_tool_call_is_a_real_chat_completion_and_the_model_is_not_cal
 def test_forward_calls_the_model_with_our_keyword_removed(tmp_path: Path) -> None:
     fake = Fake(FORWARD)
     resp = _openai(fake, tmp_path).chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     assert resp.choices[0].message.content == "from the model"
     assert "conversation_id" not in fake.provider_requests[0]
@@ -176,7 +183,7 @@ def test_the_trail_keeps_what_agentcompile_decided_along_the_way(tmp_path: Path)
     ]
     fake = Fake({**FORWARD, "events": events})
     _openai(fake, tmp_path).chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     assert _trail(tmp_path)[0]["events"] == events
 
@@ -184,7 +191,7 @@ def test_the_trail_keeps_what_agentcompile_decided_along_the_way(tmp_path: Path)
 def test_malformed_events_are_dropped_not_fatal(tmp_path: Path) -> None:
     fake = Fake({**CALL, "events": ["not a dict", {"decision": "emit_read"}]})
     _openai(fake, tmp_path).chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     event = _trail(tmp_path)[0]
     assert event["route"] == "compiled" and event["events"] == [{"decision": "emit_read"}]
@@ -201,7 +208,7 @@ def test_malformed_events_are_dropped_not_fatal(tmp_path: Path) -> None:
 )
 def test_any_decision_problem_fails_open_to_the_model(fake: Fake, tmp_path: Path) -> None:
     resp = _openai(fake, tmp_path).chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     assert resp.choices[0].message.content == "from the model"
     assert _trail(tmp_path)[0]["route"] == "fail-open"
@@ -226,7 +233,7 @@ def test_shadow_mode_always_calls_the_model_and_records_what_it_would_have_done(
 ) -> None:
     fake = Fake(CALL)
     resp = _openai(fake, tmp_path, mode="shadow").chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     assert resp.choices[0].message.content == "from the model"
     event = _trail(tmp_path)[0]
@@ -236,7 +243,7 @@ def test_shadow_mode_always_calls_the_model_and_records_what_it_would_have_done(
 def test_streaming_a_compiled_tool_call(tmp_path: Path) -> None:
     fake = Fake(CALL)
     stream = _openai(fake, tmp_path).chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1", stream=True
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1", stream=True
     )
     with stream:
         chunks = list(stream)
@@ -249,14 +256,16 @@ def test_pydantic_messages_from_earlier_responses_are_sent_as_json(tmp_path: Pat
     fake = Fake(CALL)
     client = _openai(fake, tmp_path)
     first = client.chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     history = [
         *MESSAGES,
         first.choices[0].message,
         {"role": "tool", "tool_call_id": "call_1", "content": "{}"},
     ]
-    client.chat.completions.create(model="gpt-x", messages=history, conversation_id="c1")
+    client.chat.completions.create(
+        model="gpt-x", messages=history, tools=TOOLS, conversation_id="c1"
+    )
     sent = json.loads(fake.decide_requests[1].content)["request"]["messages"]
     assert sent[1]["tool_calls"][0]["function"]["name"] == "get_order_details"
 
@@ -279,6 +288,7 @@ def test_anthropic_compiled_reply_and_stream(tmp_path: Path) -> None:
             model="claude-x",
             max_tokens=100,
             messages=MESSAGES,
+            tools=ANTHROPIC_TOOLS,
             conversation_id="c1",
             stream=True,
         )
@@ -311,12 +321,12 @@ async def test_async_openai_compiled_and_forward(tmp_path: Path) -> None:
         http_client=httpx.AsyncClient(transport=httpx.MockTransport(fake.decide)),
     )
     resp = await client.chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     assert resp.choices[0].message.tool_calls[0].function.name == "get_order_details"
     fake.decision = FORWARD
     resp = await client.chat.completions.create(
-        model="gpt-x", messages=MESSAGES, conversation_id="c1"
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
     )
     assert resp.choices[0].message.content == "from the model"
 
@@ -334,9 +344,13 @@ def test_the_trail_command_prints_a_summary(
 
     fake = Fake(CALL)
     client = _openai(fake, tmp_path)
-    client.chat.completions.create(model="gpt-x", messages=MESSAGES, conversation_id="c1")
+    client.chat.completions.create(
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
+    )
     fake.decision = FORWARD
-    client.chat.completions.create(model="gpt-x", messages=MESSAGES, conversation_id="c1")
+    client.chat.completions.create(
+        model="gpt-x", messages=MESSAGES, tools=TOOLS, conversation_id="c1"
+    )
     assert main(["trail", "--path", str(tmp_path / "trail.jsonl")]) == 0
     out = capsys.readouterr().out
     assert (

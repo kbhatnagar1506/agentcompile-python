@@ -29,11 +29,12 @@ with agentcompile.conversation(ticket.id):
 
 ## What happens on each call
 
-1. With a conversation id, the SDK asks AgentCompile for a decision (`/v1/decide`; it waits at most `timeout`, default 2 s).
-2. **compiled**: the answer (a tool call or a reply) comes back in exactly the provider's response shape; your loop runs the tool as usual.
+1. With a conversation id, the SDK asks AgentCompile for a decision (`/v1/decide`). The whole call takes at most `timeout` (default 2 s), and AgentCompile is told that, so it answers in time.
+2. **compiled**: the answer (a tool call or a reply) comes back in exactly the provider's response shape; your loop runs the tool as usual. A tool call is only ever one of the `tools` you passed.
 3. **forwarded**: your model is called as normal.
-4. **fail-open**: AgentCompile errored, was slow or sent something unusable, so your model is called as normal.
-5. **no conversation id**: your model is called and no decision is made.
+4. **fail-open**: AgentCompile errored, was slow or sent something unusable, so your model is called as normal. After 5 failures in a row the SDK stops asking for 30 s, then tries one call.
+5. **unsupported**: the request asks for something a compiled answer couldn't honour (`n` > 1, a forced `tool_choice`, a `response_format`), so your model is called without asking.
+6. **no conversation id**: your model is called and no decision is made.
 
 Your provider key never leaves your process. `mode="shadow"` decides but always calls your model, so you can see what it would have done before you switch it on.
 
