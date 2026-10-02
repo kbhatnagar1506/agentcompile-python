@@ -1,17 +1,30 @@
 """The decision call to AgentCompile. Never raises: any problem is a `None` decision, which the
-wrapper treats as forward (fail open)."""
+wrapper treats as forward (fail open).
+
+Bounded: the whole call (name lookup, connect, send, read) takes at most `timeout`, and the
+server is told how long that is so it answers in time. After a few failures in a row the
+breaker opens: calls go straight to the model, without asking, until it tries again.
+"""
 
 from __future__ import annotations
 
+import asyncio
+import concurrent.futures
+import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 import httpx
 
 COMPANY_HEADER = "x-agentcompiler-company"
 CONVERSATION_HEADER = "x-agentcompiler-conversation"
 KEY_HEADER = "x-agentcompiler-key"
+MODE_HEADER = "x-agentcompiler-mode"
+DEADLINE_HEADER = "x-agentcompiler-deadline-ms"
+
+FAILURES_TO_OPEN = 5
+OPEN_FOR_S = 30.0
 
 
 @dataclass(frozen=True)
@@ -58,6 +71,7 @@ class Settings:
     key: str | None
     company: str | None
     timeout: float
+    mode: str = "live"
 
 
 def _request(
@@ -75,27 +89,113 @@ def _request(
     )
 
 
+def _decision_request(
+    settings: Settings, provider: str, conversation_id: str, payload: dict[str, Any]
+) -> tuple[str, dict[str, str], dict[str, Any]]:
+    url, headers, body = _request(settings, provider, conversation_id, payload)
+    headers[DEADLINE_HEADER] = str(int(settings.timeout * 1000))
+    if settings.mode == "shadow":  # the server decides but keeps no state
+        headers[MODE_HEADER] = "shadow"
+    return url, headers, body
+
+
+class Breaker:
+    """After `threshold` failures in a row (no answer, or a 5xx or 429), stop asking for
+    `open_for` seconds; then let one call through to see whether AgentCompile is back."""
+
+    def __init__(
+        self,
+        threshold: int = FAILURES_TO_OPEN,
+        open_for: float = OPEN_FOR_S,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.threshold, self.open_for, self._clock = threshold, open_for, clock
+        self._failures = 0
+        self._open_until = 0.0
+        self._trying = False
+        self._lock = threading.Lock()
+
+    def allow(self) -> bool:
+        with self._lock:
+            if self._failures < self.threshold:
+                return True
+            if self._clock() < self._open_until or self._trying:
+                return False
+            self._trying = True  # the one call that finds out
+            return True
+
+    def record(self, ok: bool) -> None:
+        with self._lock:
+            self._trying = False
+            if ok:
+                self._failures = 0
+                return
+            self._failures += 1
+            if self._failures >= self.threshold:
+                self._open_until = self._clock() + self.open_for
+
+
+def _answered(status: int) -> bool:
+    """The service is up: anything but a 5xx or being told to back off."""
+    return status < 500 and status != 429
+
+
+def _read(response: Any, ms: float) -> tuple[Decision | None, float, str | None]:
+    if response.status_code != 200:
+        return None, ms, f"HTTP {response.status_code}"
+    decision = Decision.parse(response.json())
+    return decision, ms, None if decision else "malformed decision"
+
+
+_POOL: concurrent.futures.ThreadPoolExecutor | None = None
+_POOL_LOCK = threading.Lock()
+
+
+def _pool() -> concurrent.futures.ThreadPoolExecutor:
+    """Where sync decision calls run, so the caller waits at most `timeout` in all (httpx's
+    timeouts are per phase, and a name lookup has none). A call past its time finishes there,
+    bounded by httpx's own timeouts, while the caller has moved on."""
+    global _POOL
+    with _POOL_LOCK:
+        if _POOL is None:
+            _POOL = concurrent.futures.ThreadPoolExecutor(8, "agentcompile-decide")
+        return _POOL
+
+
 class Decider:
     def __init__(self, settings: Settings, http: httpx.Client | None = None) -> None:
         self.settings = settings
         self._http = http or httpx.Client(timeout=settings.timeout)
+        self.breaker = Breaker()
 
     def decide(
         self, provider: str, conversation_id: str, payload: dict[str, Any]
     ) -> tuple[Decision | None, float, str | None]:
         """(decision or None, milliseconds, error text)."""
-        url, headers, body = _request(self.settings, provider, conversation_id, payload)
+        if not self.breaker.allow():
+            return None, 0.0, "circuit open"
+        url, headers, body = _decision_request(
+            self.settings, provider, conversation_id, payload
+        )
         start = time.perf_counter()
+        future = None
         try:
-            response = self._http.post(
-                url, headers=headers, json=body, timeout=self.settings.timeout
+            future = _pool().submit(
+                self._http.post, url, headers=headers, json=body, timeout=self.settings.timeout
             )
-            ms = (time.perf_counter() - start) * 1000
-            if response.status_code != 200:
-                return None, ms, f"HTTP {response.status_code}"
-            decision = Decision.parse(response.json())
-            return decision, ms, None if decision else "malformed decision"
+            response = future.result(timeout=self.settings.timeout)
+        except concurrent.futures.TimeoutError:
+            if future is not None:
+                future.cancel()
+            self.breaker.record(False)
+            return None, (time.perf_counter() - start) * 1000, "deadline"
         except Exception as exc:  # fail open
+            self.breaker.record(False)
+            return None, (time.perf_counter() - start) * 1000, type(exc).__name__
+        self.breaker.record(_answered(response.status_code))
+        try:
+            return _read(response, (time.perf_counter() - start) * 1000)
+        except Exception as exc:
             return None, (time.perf_counter() - start) * 1000, type(exc).__name__
 
 
@@ -103,20 +203,30 @@ class AsyncDecider:
     def __init__(self, settings: Settings, http: httpx.AsyncClient | None = None) -> None:
         self.settings = settings
         self._http = http or httpx.AsyncClient(timeout=settings.timeout)
+        self.breaker = Breaker()
 
     async def decide(
         self, provider: str, conversation_id: str, payload: dict[str, Any]
     ) -> tuple[Decision | None, float, str | None]:
-        url, headers, body = _request(self.settings, provider, conversation_id, payload)
+        if not self.breaker.allow():
+            return None, 0.0, "circuit open"
+        url, headers, body = _decision_request(
+            self.settings, provider, conversation_id, payload
+        )
         start = time.perf_counter()
         try:
-            response = await self._http.post(
-                url, headers=headers, json=body, timeout=self.settings.timeout
+            response = await asyncio.wait_for(
+                self._http.post(url, headers=headers, json=body, timeout=self.settings.timeout),
+                timeout=self.settings.timeout,
             )
-            ms = (time.perf_counter() - start) * 1000
-            if response.status_code != 200:
-                return None, ms, f"HTTP {response.status_code}"
-            decision = Decision.parse(response.json())
-            return decision, ms, None if decision else "malformed decision"
+        except asyncio.TimeoutError:
+            self.breaker.record(False)
+            return None, (time.perf_counter() - start) * 1000, "deadline"
         except Exception as exc:  # fail open
+            self.breaker.record(False)
+            return None, (time.perf_counter() - start) * 1000, type(exc).__name__
+        self.breaker.record(_answered(response.status_code))
+        try:
+            return _read(response, (time.perf_counter() - start) * 1000)
+        except Exception as exc:
             return None, (time.perf_counter() - start) * 1000, type(exc).__name__

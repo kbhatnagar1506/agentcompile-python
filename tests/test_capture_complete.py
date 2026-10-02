@@ -258,7 +258,9 @@ def test_async_streams_are_captured_too() -> None:
             http_client=httpx.AsyncClient(transport=_provider(OPENAI_STREAM)),
         )
         client = agentcompile.wrap(real, base_url="http://ac.test", trail=False, capture=True)
-        _capture._ALL[-1]._http = httpx.Client(transport=httpx.MockTransport(service))
+        list(_capture._ALL.values())[-1]._http = httpx.Client(
+            transport=httpx.MockTransport(service)
+        )
         stream = await client.chat.completions.create(
             model="m", messages=MESSAGES, stream=True, conversation_id="c1"
         )

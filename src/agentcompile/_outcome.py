@@ -17,14 +17,14 @@ from ._decide import CONVERSATION_HEADER, Settings, _request
 
 OUTCOMES = ("resolved", "escalated", "unresolved", "abandoned", "reopened", "complaint")
 
-_settings: list[Settings] = []  # the most recently wrapped client's, last
-_threads: list[threading.Thread] = []
+_settings: list[Settings] = []  # the most recently wrapped client's (one, not every one)
+_threads: list[threading.Thread] = []  # still sending (finished ones are let go)
 sent = 0
 failed = 0
 
 
 def remember(settings: Settings) -> None:
-    _settings.append(settings)
+    _settings[:] = [settings]
 
 
 def outcome(conversation_id: str, label: str, note: str | None = None) -> None:
@@ -42,6 +42,7 @@ def outcome(conversation_id: str, label: str, note: str | None = None) -> None:
     if note:
         record["note"] = note
     thread = threading.Thread(target=_send, args=(_settings[-1], record), daemon=True)
+    _threads[:] = [t for t in _threads if t.is_alive()]
     _threads.append(thread)
     thread.start()
 

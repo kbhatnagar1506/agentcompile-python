@@ -114,7 +114,10 @@ def test_a_failing_service_never_breaks_the_call() -> None:
     )
     assert resp.choices[0].message.content == "from the model"
     agentcompile.flush(5)
-    assert _capture._ALL[-1].failed == 1 and _capture._ALL[-1].sent == 0
+    assert (
+        list(_capture._ALL.values())[-1].failed == 1
+        and list(_capture._ALL.values())[-1].sent == 0
+    )
 
 
 def test_a_full_queue_drops_the_oldest(monkeypatch: pytest.MonkeyPatch) -> None:
