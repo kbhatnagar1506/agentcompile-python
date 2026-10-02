@@ -19,10 +19,13 @@ from ._capture import Capturer, flush_all
 from ._conversation import conversation
 from ._core import LIVE, SHADOW, Proxy, Router, async_create, sync_create
 from ._decide import AsyncDecider, Decider, Settings
+from ._outcome import OUTCOMES, outcome
+from ._outcome import flush as _flush_outcomes
+from ._outcome import remember as _remember
 from ._scrub import load_key
 from ._trail import OnEvent, Trail
 
-__all__ = ["LIVE", "SHADOW", "Settings", "conversation", "flush", "wrap"]
+__all__ = ["LIVE", "OUTCOMES", "SHADOW", "Settings", "conversation", "flush", "outcome", "wrap"]
 try:
     from ._version import __version__
 except ImportError:  # running from a source checkout that was never built
@@ -64,6 +67,7 @@ def wrap(
         timeout=timeout,
     )
     the_trail = Trail(trail, on_event)
+    _remember(settings)  # outcome() sends with the client wrapped last
     if capture is None:
         capture = os.environ.get("AGENTCOMPILE_CAPTURE", "") in ("1", "true", "yes")
     # One sender per wrapped client; it always sends from its own thread (sync client).
@@ -103,8 +107,10 @@ def wrap(
 
 
 def flush(timeout: float = 5.0) -> None:
-    """Send every captured call still queued (short scripts and tests; also runs at exit)."""
+    """Send every captured call and outcome still queued (short scripts and tests; also runs
+    at exit)."""
     flush_all(timeout)
+    _flush_outcomes(timeout)
 
 
 def _router(

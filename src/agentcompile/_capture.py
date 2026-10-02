@@ -18,9 +18,10 @@ from typing import Any
 
 import httpx
 
+from ._assemble import assemble
 from ._decide import CONVERSATION_HEADER, Settings, _request
 from ._payload import jsonable, payload
-from ._scrub import scrub_call
+from ._scrub import scrub_call, scrub_value
 
 MAX_QUEUE = 2000
 BATCH = 50
@@ -63,9 +64,11 @@ class Capturer:
         kwargs: dict[str, Any],
         response: Any,
         stream: bool = False,
+        streamed: dict[str, Any] | None = None,
+        customer: str | None = None,
     ) -> None:
-        """Queue one call. Never raises. A streamed answer is not captured yet: the record
-        keeps the request and says so."""
+        """Queue one call. Never raises. `stream` without `streamed`: the answer wasn't kept
+        (the record says so); `streamed`: the answer was assembled from its stream."""
         try:
             request, answer = payload(kwargs), None if stream else jsonable(response)
             if self.scrub_key is not None:
@@ -78,10 +81,20 @@ class Capturer:
                 "request": request,
                 "response": answer,
             }
+            if customer:
+                # The customer's id, scrubbed like everything else (an email becomes a token).
+                record["end_user"] = (
+                    scrub_value(customer, self.scrub_key, "customer")
+                    if self.scrub_key is not None
+                    else customer
+                )
             if self.scrub_key is not None:
                 record["scrubbed"] = True
             if stream:
                 record["stream"] = True
+            if streamed is not None:
+                record["stream"] = True
+                record["stream_complete"] = streamed["complete"]
             with self._lock:
                 if len(self._queue) == self._queue.maxlen:
                     self.dropped += 1  # the deque drops the oldest
@@ -91,6 +104,26 @@ class Capturer:
                 self._wake.set()
         except Exception:
             self.dropped += 1
+
+    def add_stream(
+        self,
+        provider: str,
+        conversation_id: str | None,
+        kwargs: dict[str, Any],
+        chunks: list[Any],
+        complete: bool,
+        customer: str | None = None,
+    ) -> None:
+        """Queue a streamed call once its stream is done: the chunks assembled into the answer
+        a non-streamed call would have had. A stream stopped early is kept and marked."""
+        self.add(
+            provider,
+            conversation_id,
+            kwargs,
+            assemble(provider, chunks),
+            streamed={"complete": complete, "chunks": len(chunks)},
+            customer=customer,
+        )
 
     def flush(self, timeout: float = 5.0) -> None:
         """Send everything queued now (tests, and at exit)."""
