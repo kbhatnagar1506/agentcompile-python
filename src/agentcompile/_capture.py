@@ -179,12 +179,21 @@ class Capturer:
                 self.dropped += 1
                 continue
             if batch and size + len(line) > MAX_BATCH_BYTES:
-                with self._lock:  # the rest waits for the next batch, in order
-                    self._queue.extendleft(reversed(records[i:]))
+                self._put_back(records[i:])
                 break
             batch.append(line)
             size += len(line)
         return batch
+
+    def _put_back(self, rest: list[dict[str, Any]]) -> None:
+        """Calls taken for a batch that didn't fit, back at the front, in order. They are the
+        oldest: when newer calls filled the queue meanwhile, they are the ones dropped, and
+        counted (extendleft would evict the newest instead, silently)."""
+        with self._lock:
+            room = (self._queue.maxlen or len(rest)) - len(self._queue)
+            keep = rest[len(rest) - max(room, 0) :]
+            self.dropped += len(rest) - len(keep)
+            self._queue.extendleft(reversed(keep))
 
     def _send_batch(self) -> None:
         batch = self._take()

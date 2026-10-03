@@ -312,3 +312,14 @@ def test_wrapping_again_reuses_the_sender_and_keeps_one_destination(tmp_path: Pa
         )
     assert len(_capture._ALL) == 1
     assert len(_outcome._settings) == 1
+
+
+def test_putting_a_batch_back_on_a_full_queue_drops_the_oldest_counted() -> None:
+    import collections
+
+    capturer = _capture.Capturer(Settings("http://ac.test", "ack_acme.k", None, 1.0))
+    capturer._queue = collections.deque([{"id": n} for n in (4, 5, 6)], maxlen=4)
+    capturer._put_back([{"id": 2}, {"id": 3}])  # older calls, one free place
+    assert [r["id"] for r in capturer._queue] == [3, 4, 5, 6] and capturer.dropped == 1
+    capturer._put_back([{"id": 1}])  # no room: the oldest is the one dropped
+    assert [r["id"] for r in capturer._queue] == [3, 4, 5, 6] and capturer.dropped == 2
