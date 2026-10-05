@@ -7,7 +7,14 @@ from typing import Any
 # What the engine reads; everything else stays between the customer and their provider.
 _FIELDS = ("model", "messages", "system", "tools")
 # A Responses API call (OpenAI's `responses.create`): the same, in that API's own words.
-_RESPONSES_FIELDS = ("model", "input", "instructions", "tools", "previous_response_id")
+_RESPONSES_FIELDS = (
+    "model",
+    "input",
+    "instructions",
+    "tools",
+    "previous_response_id",
+    "conversation",
+)
 
 
 def jsonable(value: Any) -> Any:
