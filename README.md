@@ -87,6 +87,32 @@ with agentcompile.conversation(ticket.id, customer=ticket.customer_id):
 Streamed answers are captured too: your agent reads the stream as always, and the whole answer
 is captured once it ends.
 
+## The Responses API and any framework
+
+A wrapped OpenAI client captures `client.responses.create(...)` as well (streamed or not). Those
+calls always go to your model: compiled answers come in Chat Completions' and Anthropic's shapes.
+
+When a framework builds its own client (LangChain, LiteLLM, CrewAI, Pydantic AI, the OpenAI
+Agents SDK), give it a capturing HTTP client instead of wrapping anything:
+
+```python
+http = agentcompile.http_client(key="ack_...")         # async: agentcompile.async_http_client()
+
+ChatOpenAI(model="gpt-5", http_client=http)            # LangChain
+litellm.client_session = http                          # LiteLLM, CrewAI
+OpenAIProvider(http_client=agentcompile.async_http_client())   # Pydantic AI
+set_default_openai_client(AsyncOpenAI(http_client=agentcompile.async_http_client()))  # Agents SDK
+
+with agentcompile.conversation(ticket.id):
+    run_agent()
+```
+
+It captures the POSTs to `/chat/completions`, `/responses` and `/messages` that pass through
+it, scrubbed the same way, and leaves everything else alone. It only captures: to have known
+jobs answered compiled, use `wrap`. An SDK that takes only `httpx2` clients (newer `anthropic`
+releases) takes `agentcompile.http_client(lib="httpx2")`.
+`agentcompile.transport()` gives the bare transport, to wrap one of your own.
+
 ## Privacy
 
 With `capture=True`, personal data is scrubbed on your machine before anything is sent:
