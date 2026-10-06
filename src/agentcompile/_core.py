@@ -250,6 +250,65 @@ def async_create(
     return create
 
 
+#: Why a Responses API call is never asked about: compiled answers come in Chat Completions' and
+#: Anthropic's shapes, so these calls go to the model, captured like any other.
+RESPONSES_API = "responses api"
+
+
+def _forward_only(router: Router, conversation_id: str | None) -> tuple[str, str | None]:
+    return (
+        ("no-conversation", None) if conversation_id is None else ("unsupported", RESPONSES_API)
+    )
+
+
+def sync_forward(router: Router, original: Callable[..., Any]) -> Callable[..., Any]:
+    """create() for an API we capture but don't answer: straight to the model."""
+
+    def create(*args: Any, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        conversation_id, real_kwargs = router.prepare(kwargs)
+        stream = bool(real_kwargs.get("stream"))
+        result = original(*args, **real_kwargs)
+        result = router.capture(conversation_id, real_kwargs, result, stream)
+        route, error = _forward_only(router, conversation_id)
+        router.record(
+            route=route,
+            conversation_id=conversation_id,
+            kwargs=real_kwargs,
+            decision=None,
+            decide_ms=None,
+            error=error,
+            started=started,
+            stream=stream,
+        )
+        return result
+
+    return create
+
+
+def async_forward(router: Router, original: Callable[..., Any]) -> Callable[..., Any]:
+    async def create(*args: Any, **kwargs: Any) -> Any:
+        started = time.perf_counter()
+        conversation_id, real_kwargs = router.prepare(kwargs)
+        stream = bool(real_kwargs.get("stream"))
+        result = await original(*args, **real_kwargs)
+        result = router.capture(conversation_id, real_kwargs, result, stream, True)
+        route, error = _forward_only(router, conversation_id)
+        router.record(
+            route=route,
+            conversation_id=conversation_id,
+            kwargs=real_kwargs,
+            decision=None,
+            decide_ms=None,
+            error=error,
+            started=started,
+            stream=stream,
+        )
+        return result
+
+    return create
+
+
 class Proxy:
     """Everything delegates to the real object except the attributes we override."""
 

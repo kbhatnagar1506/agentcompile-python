@@ -21,7 +21,7 @@ import httpx
 
 from ._assemble import assemble
 from ._decide import CONVERSATION_HEADER, Settings, _request
-from ._payload import jsonable, payload
+from ._payload import jsonable, request_of
 from ._scrub import scrub_call, scrub_value
 
 MAX_QUEUE = 2000
@@ -88,7 +88,7 @@ class Capturer:
         """Queue one call. Never raises. `stream` without `streamed`: the answer wasn't kept
         (the record says so); `streamed`: the answer was assembled from its stream."""
         try:
-            request, answer = payload(kwargs), None if stream else jsonable(response)
+            request, answer = request_of(kwargs), None if stream else jsonable(response)
             if self.scrub_key is not None:
                 request = scrub_call(request, self.scrub_key)
                 answer = scrub_call(answer, self.scrub_key)

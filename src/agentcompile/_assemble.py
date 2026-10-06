@@ -1,7 +1,7 @@
 """Streamed answers, captured whole: each chunk passes to your agent untouched as it arrives, a
 copy is kept, and when the stream ends the pieces are assembled into the same shape a
-non-streamed answer has (a chat completion, or an Anthropic message), so AgentCompile reads
-streamed and non-streamed calls the same way."""
+non-streamed answer has (a chat completion, a Responses API response, or an Anthropic message),
+so AgentCompile reads streamed and non-streamed calls the same way."""
 
 from __future__ import annotations
 
@@ -16,7 +16,11 @@ OnDone = Callable[[list[Any], bool], None]  # (chunks as JSON, the stream ran to
 
 def assemble(provider: str, chunks: list[Any]) -> dict[str, Any] | None:
     try:
-        return _openai(chunks) if provider == "openai" else _anthropic(chunks)
+        if provider != "openai":
+            return _anthropic(chunks)
+        if any(str(c.get("type", "")).startswith("response.") for c in chunks):
+            return _responses(chunks)
+        return _openai(chunks)
     except Exception:  # never break the agent over a shape we didn't expect
         return None
 
@@ -58,6 +62,27 @@ def _openai(chunks: list[dict[str, Any]]) -> dict[str, Any]:
     if usage:
         out["usage"] = usage
     return out
+
+
+#: The events that end a Responses API stream, each carrying the whole response.
+_RESPONSE_DONE = ("response.completed", "response.incomplete", "response.failed")
+
+
+def _responses(events: list[dict[str, Any]]) -> dict[str, Any]:
+    """A Responses API stream: its last event carries the whole response. A stream stopped
+    early has none, so the response is rebuilt from the items it finished."""
+    for event in reversed(events):
+        if event.get("type") in _RESPONSE_DONE and isinstance(event.get("response"), dict):
+            return dict(event["response"])
+    response: dict[str, Any] = {}
+    items: dict[int, dict[str, Any]] = {}
+    for event in events:
+        if event.get("type") == "response.created" and isinstance(event.get("response"), dict):
+            response = dict(event["response"])
+        elif event.get("type") == "response.output_item.done":
+            items[int(event.get("output_index", len(items)))] = dict(event.get("item") or {})
+    response["output"] = [items[i] for i in sorted(items)]
+    return response
 
 
 def _anthropic(events: list[dict[str, Any]]) -> dict[str, Any]:
