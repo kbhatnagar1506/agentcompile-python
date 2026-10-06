@@ -401,7 +401,7 @@ def test_the_transport_reads_compressed_answers() -> None:
 
 
 def test_the_transport_captures_anthropic_calls_over_httpx2() -> None:
-    import httpx2
+    httpx2 = pytest.importorskip("httpx2")  # only the newer provider SDKs bring it
 
     service, provider = Service(), Provider()
 
@@ -438,7 +438,7 @@ def test_the_transport_captures_anthropic_calls_over_httpx2() -> None:
 
 
 def test_the_library_is_taken_from_the_wrapped_transport() -> None:
-    import httpx2
+    httpx2 = pytest.importorskip("httpx2")  # only the newer provider SDKs bring it
 
     from agentcompile._transport import lib_of
 
@@ -532,12 +532,11 @@ def test_a_stream_closed_early_is_captured_once_and_marked() -> None:
 
 def test_http_client_helpers_build_capturing_clients(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("AGENTCOMPILE_KEY", "ack_acme.k")
-    import httpx2
-
     sync, async_ = agentcompile.http_client(), agentcompile.async_http_client()
     assert isinstance(sync._transport, agentcompile.CaptureTransport)
     assert isinstance(async_._transport, agentcompile.AsyncCaptureTransport)
     assert sync.timeout.read == 600.0
+    httpx2 = pytest.importorskip("httpx2")  # only the newer provider SDKs bring it
     assert isinstance(agentcompile.http_client(lib="httpx2"), httpx2.Client)
     assert isinstance(agentcompile.async_http_client(lib="httpx2"), httpx2.AsyncClient)
 
