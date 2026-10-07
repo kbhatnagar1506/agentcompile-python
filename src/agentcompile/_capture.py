@@ -2,8 +2,10 @@
 can find the jobs your agent repeats (opt-in: `wrap(..., capture=True)`).
 
 Never in the way: calls are queued and sent by one background thread in batches; a full queue
-drops the oldest, a failed send is dropped and counted, and nothing here ever raises into your
-agent. Each record is one line in the exchange-log shape AgentCompile's importer reads:
+drops the oldest, a send that fails for a passing reason (no connection, a timeout, 408, 429,
+5xx) is retried a few times with backoff, one that still fails is dropped and counted, and
+nothing here ever raises into your agent. Each record is one line in the exchange-log shape
+AgentCompile's importer reads:
 {"provider", "conversation_id", "timestamp", "request", "response"}.
 """
 
@@ -31,6 +33,12 @@ BATCH = 50
 MAX_BATCH_BYTES = 4 * 1024 * 1024
 MAX_RECORD_BYTES = 7 * 1024 * 1024
 INTERVAL = 1.0
+# A failed batch is tried RETRIES more times, waiting BACKOFF, then twice that, ... (or what
+# the server's Retry-After asks, up to MAX_WAIT); about 3.5 s in all before it is dropped.
+RETRIES = 3
+BACKOFF = 0.5
+MAX_WAIT = 10.0
+_PASSING = frozenset({408, 425, 429, 500, 502, 503, 504})
 
 
 _ALL: dict[tuple[Any, ...], Capturer] = {}
@@ -72,7 +80,10 @@ class Capturer:
         self._thread: threading.Thread | None = None
         self.sent = 0
         self.dropped = 0
-        self.failed = 0
+        self.failed = (
+            0  # calls dropped after their send failed (and was retried, if it could be)
+        )
+        self.retried = 0  # batch sends tried again
         atexit.register(self.flush, 2.0)
 
     def add(
@@ -147,7 +158,7 @@ class Capturer:
         """Send everything queued now (tests, and at exit)."""
         deadline = time.monotonic() + timeout
         while self._queue and time.monotonic() < deadline:
-            self._send_batch()
+            self._send_batch(deadline)
 
     def _start(self) -> None:
         if self._thread is None or not self._thread.is_alive():
@@ -195,7 +206,9 @@ class Capturer:
             self.dropped += len(rest) - len(keep)
             self._queue.extendleft(reversed(keep))
 
-    def _send_batch(self) -> None:
+    def _send_batch(self, deadline: float | None = None) -> None:
+        """Send one batch, retrying a passing failure with backoff; never past `deadline` (a
+        flush's), when there is one."""
         batch = self._take()
         if not batch:
             return
@@ -203,14 +216,35 @@ class Capturer:
         headers.pop(CONVERSATION_HEADER, None)
         headers["content-type"] = "application/json"
         url = url.rsplit("/v1/decide", 1)[0] + "/v1/capture"
+        body = ('{"exchanges": [' + ", ".join(batch) + "]}").encode("utf-8")
+        for attempt in range(RETRIES + 1):
+            wait = self._post(url, headers, body)
+            if wait is None:
+                self.sent += len(batch)
+                return
+            if wait < 0 or attempt == RETRIES:
+                break
+            wait = min(max(wait, BACKOFF * 2**attempt), MAX_WAIT)
+            if deadline is not None and time.monotonic() + wait > deadline:
+                break
+            self.retried += 1
+            time.sleep(wait)
+        self.failed += len(batch)
+
+    def _post(self, url: str, headers: dict[str, str], body: bytes) -> float | None:
+        """None when the batch was taken; else how long the server asks us to wait before
+        trying again (0: no preference), or -1 for a failure retrying won't fix."""
         try:
             if self._http is None:
                 self._http = httpx.Client(timeout=self.settings.timeout)
-            body = '{"exchanges": [' + ", ".join(batch) + "]}"
-            response = self._http.post(url, headers=headers, content=body.encode("utf-8"))
-            if response.status_code == 200:
-                self.sent += len(batch)
-            else:
-                self.failed += len(batch)
+            response = self._http.post(url, headers=headers, content=body)
         except Exception:
-            self.failed += len(batch)
+            return 0.0
+        if response.status_code == 200:
+            return None
+        if response.status_code not in _PASSING:
+            return -1.0
+        try:
+            return float(response.headers.get("retry-after", 0))
+        except ValueError:
+            return 0.0

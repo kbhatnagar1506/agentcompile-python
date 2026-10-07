@@ -120,6 +120,72 @@ def test_a_failing_service_never_breaks_the_call() -> None:
     )
 
 
+def _capturer_against(handler: Any) -> Any:
+    settings = agentcompile.Settings("http://ac.test", "ack_acme.k", None, 1.0)
+    capturer = _capture.Capturer(settings, httpx.Client(transport=httpx.MockTransport(handler)))
+    capturer._start = lambda: None  # type: ignore[method-assign]
+    capturer.add("openai", "c1", {"model": "gpt-x", "messages": MESSAGES}, COMPLETION)
+    return capturer
+
+
+@pytest.fixture
+def _no_waiting(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    waits: list[float] = []
+    monkeypatch.setattr(_capture.time, "sleep", waits.append)
+    return waits
+
+
+def test_a_passing_failure_is_retried_until_it_lands(_no_waiting: list[float]) -> None:
+    answers = iter([503, 429, 200])
+    attempts: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if not attempts:
+            attempts.append(0)
+            raise httpx.ConnectError("down")
+        attempts.append(1)
+        return httpx.Response(next(answers), json={})
+
+    capturer = _capturer_against(handler)
+    capturer._send_batch()
+    assert (capturer.sent, capturer.failed, capturer.retried) == (1, 0, 3)
+    assert _no_waiting == [0.5, 1.0, 2.0]  # backoff doubles
+
+
+def test_retries_are_bounded_and_the_drop_counted(_no_waiting: list[float]) -> None:
+    calls: list[int] = []
+    capturer = _capturer_against(lambda r: calls.append(1) or httpx.Response(502))
+    capturer._send_batch()
+    assert len(calls) == _capture.RETRIES + 1
+    assert (capturer.sent, capturer.failed) == (0, 1)
+
+
+def test_a_failure_retrying_wont_fix_is_not_retried(_no_waiting: list[float]) -> None:
+    calls: list[int] = []
+    capturer = _capturer_against(lambda r: calls.append(1) or httpx.Response(401))
+    capturer._send_batch()
+    assert len(calls) == 1 and capturer.failed == 1 and _no_waiting == []
+
+
+def test_retry_after_is_honoured_up_to_a_cap(_no_waiting: list[float]) -> None:
+    answers = iter(
+        [
+            httpx.Response(429, headers={"retry-after": "3"}),
+            httpx.Response(429, headers={"retry-after": "3600"}),
+            httpx.Response(200),
+        ]
+    )
+    capturer = _capturer_against(lambda r: next(answers))
+    capturer._send_batch()
+    assert _no_waiting == [3.0, _capture.MAX_WAIT] and capturer.sent == 1
+
+
+def test_a_flush_never_waits_past_its_deadline(_no_waiting: list[float]) -> None:
+    capturer = _capturer_against(lambda r: httpx.Response(503))
+    capturer.flush(0.1)  # the first backoff (0.5 s) would overrun it
+    assert _no_waiting == [] and capturer.failed == 1
+
+
 def test_a_full_queue_drops_the_oldest(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(_capture, "MAX_QUEUE", 2)
     settings = agentcompile.Settings("http://ac.test", "ack_acme.k", None, 1.0)

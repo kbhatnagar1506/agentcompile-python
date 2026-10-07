@@ -65,7 +65,7 @@ def wrap(
     key: str | None = None,
     base_url: str | None = None,
     mode: str = LIVE,
-    timeout: float = 2.0,
+    timeout: float = 5.0,
     trail: str | bool | None = True,
     on_event: OnEvent | None = None,
     company: str | None = None,
@@ -145,7 +145,7 @@ def transport(
     base_url: str | None = None,
     company: str | None = None,
     scrub: bool = True,
-    timeout: float = 2.0,
+    timeout: float = 5.0,
 ) -> Any:
     """A transport that captures every model call through it, for frameworks whose client you
     don't hold (LangChain, LiteLLM, CrewAI, Pydantic AI, ...). Capture only: calls are never
@@ -165,7 +165,7 @@ def async_transport(
     base_url: str | None = None,
     company: str | None = None,
     scrub: bool = True,
-    timeout: float = 2.0,
+    timeout: float = 5.0,
 ) -> Any:
     """The async version of transport()."""
     _, async_ = classes(lib_of(wrapped, lib))
