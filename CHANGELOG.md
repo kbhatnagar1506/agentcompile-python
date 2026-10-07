@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/kbhatnagar1506/agentcompile-python/compare/v0.4.0...v0.5.0) (2026-10-07)
+
+
+### Features
+
+* retry failed capture batches with backoff; default decision budget 5 s ([#15](https://github.com/kbhatnagar1506/agentcompile-python/issues/15)) ([8c25969](https://github.com/kbhatnagar1506/agentcompile-python/commit/8c25969ad8165abfcb8a879bce56e08f6627ff87))
+
 ## [0.4.0](https://github.com/kbhatnagar1506/agentcompile-python/compare/v0.3.0...v0.4.0) (2026-10-06)
 
 
