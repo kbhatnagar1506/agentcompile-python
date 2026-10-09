@@ -1,9 +1,12 @@
 """The decision call to AgentCompile. Never raises: any problem is a `None` decision, which the
 wrapper treats as forward (fail open).
 
-Bounded: the whole call (name lookup, connect, send, read) takes at most `timeout`, and the
-server is told how long that is so it answers in time. After a few failures in a row the
-breaker opens: calls go straight to the model, without asking, until it tries again.
+Bounded: the whole call (name lookup, connect, send, read) takes at most `timeout` from when
+it is sent, and the server is told how long that is so it answers in time. Sync calls run on
+a pool that grows with the calls in flight, so one waits for a thread only past
+MAX_DECIDE_THREADS at once (and gives up if none frees within `timeout`). After a few
+failures in a row the breaker opens: calls go straight to the model, without asking, until it
+tries again.
 """
 
 from __future__ import annotations
@@ -147,19 +150,45 @@ def _read(response: Any, ms: float) -> tuple[Decision | None, float, str | None]
     return decision, ms, None if decision else "malformed decision"
 
 
+# Threads sync decision calls may use at once, across every wrapped client in the process.
+# The pool grows to it as calls overlap (a thread is started only when none is idle), so an
+# agent serving many conversations from one process never queues one conversation's decision
+# behind others' (with a fixed 8, 32 conversations in one process failed open whenever the
+# service slowed down: the queued calls' time ran out before they were sent).
+MAX_DECIDE_THREADS = 256
+
 _POOL: concurrent.futures.ThreadPoolExecutor | None = None
 _POOL_LOCK = threading.Lock()
 
 
 def _pool() -> concurrent.futures.ThreadPoolExecutor:
-    """Where sync decision calls run, so the caller waits at most `timeout` in all (httpx's
-    timeouts are per phase, and a name lookup has none). A call past its time finishes there,
-    bounded by httpx's own timeouts, while the caller has moved on."""
+    """Where sync decision calls run, so the caller waits a bounded time (httpx's timeouts
+    are per phase, and a name lookup has none). A call past its time finishes there, bounded
+    by httpx's own timeouts, while the caller has moved on."""
     global _POOL
     with _POOL_LOCK:
         if _POOL is None:
-            _POOL = concurrent.futures.ThreadPoolExecutor(8, "agentcompile-decide")
+            _POOL = concurrent.futures.ThreadPoolExecutor(
+                MAX_DECIDE_THREADS, "agentcompile-decide"
+            )
         return _POOL
+
+
+class _Sent:
+    """When a pooled call started (was sent): its deadline runs from there."""
+
+    def __init__(self) -> None:
+        self.event = threading.Event()
+        self.at = 0.0
+
+    def mark(self) -> None:
+        self.at = time.monotonic()
+        self.event.set()
+
+
+def _timed(sent: _Sent, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    sent.mark()
+    return fn(*args, **kwargs)
 
 
 class Decider:
@@ -171,19 +200,26 @@ class Decider:
     def decide(
         self, provider: str, conversation_id: str, payload: dict[str, Any]
     ) -> tuple[Decision | None, float, str | None]:
-        """(decision or None, milliseconds, error text)."""
+        """(decision or None, milliseconds, error text). The call has `timeout` from when it
+        is sent; waiting for a free thread (only past MAX_DECIDE_THREADS calls at once) is
+        bounded by `timeout` too."""
         if not self.breaker.allow():
             return None, 0.0, "circuit open"
         url, headers, body = _decision_request(
             self.settings, provider, conversation_id, payload
         )
+        timeout = self.settings.timeout
         start = time.perf_counter()
         future = None
+        sent = _Sent()
         try:
             future = _pool().submit(
-                self._http.post, url, headers=headers, json=body, timeout=self.settings.timeout
+                _timed, sent, self._http.post, url, headers=headers, json=body, timeout=timeout
             )
-            response = future.result(timeout=self.settings.timeout)
+            if not sent.event.wait(timeout):
+                raise concurrent.futures.TimeoutError("no thread free to send it")
+            left = sent.at + timeout - time.monotonic()
+            response = future.result(timeout=max(0.0, left))
         except concurrent.futures.TimeoutError:
             if future is not None:
                 future.cancel()
