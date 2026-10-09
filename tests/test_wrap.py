@@ -366,3 +366,25 @@ def test_version_flag(capsys: pytest.CaptureFixture[str]) -> None:
         main(["--version"])
     assert done.value.code == 0
     assert capsys.readouterr().out.startswith("agentcompile ")
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "expected"),
+    [({}, 5.0), ({"voice": True}, 1.5), ({"voice": True, "timeout": 3.0}, 3.0)],
+)
+def test_a_voice_agent_waits_less_for_a_decision(
+    monkeypatch: pytest.MonkeyPatch, kwargs: dict[str, Any], expected: float
+) -> None:
+    # A caller hears every second of waiting: a voice agent fails open after 1.5 s unless
+    # it names its own timeout.
+    seen: list[float] = []
+    real = agentcompile._settings
+
+    def spy(key: Any, base_url: Any, company: Any, timeout: float, mode: str) -> Any:
+        seen.append(timeout)
+        return real(key, base_url, company, timeout, mode)
+
+    monkeypatch.setattr(agentcompile, "_settings", spy)
+    client = openai.OpenAI(api_key="sk-test", base_url="http://provider.invalid/v1")
+    agentcompile.wrap(client, key="ac-test", trail=False, **kwargs)
+    assert seen == [expected]
