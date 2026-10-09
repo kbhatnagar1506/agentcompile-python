@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/kbhatnagar1506/agentcompile-python/compare/v0.5.0...v0.6.0) (2026-10-09)
+
+
+### Features
+
+* decisions never queue behind other conversations; voice=True waits 1.5 s ([#17](https://github.com/kbhatnagar1506/agentcompile-python/issues/17)) ([dbaaf04](https://github.com/kbhatnagar1506/agentcompile-python/commit/dbaaf0458899548824077dec497281a6bc0598cd))
+
 ## [0.5.0](https://github.com/kbhatnagar1506/agentcompile-python/compare/v0.4.0...v0.5.0) (2026-10-07)
 
 
