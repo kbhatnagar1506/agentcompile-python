@@ -1,0 +1,43 @@
+{
+  "name": "decide_forward_their_turn",
+  "about": "Nothing for the runtime to do (the last message is the agent's): forward, with why.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/decide",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test",
+      "x-agentcompiler-deadline-ms": "5000",
+      "x-agentcompiler-conversation": "golden-1"
+    },
+    "body": {
+      "provider": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "assistant",
+            "content": "Hello, how can I help?"
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "schema": "decision.forward",
+    "expect": {
+      "action": "forward",
+      "reason": "their agent's turn"
+    },
+    "example": {
+      "action": "forward",
+      "reason": "their agent's turn",
+      "events": [
+        {
+          "decision": "forward_turn",
+          "reason": "their agent's turn"
+        }
+      ]
+    }
+  }
+}

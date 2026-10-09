@@ -1,0 +1,66 @@
+{
+  "about": "The wire contract between the AgentCompile endpoint and its SDKs (agentcompile-python, agentcompile-js). A small JSON Schema subset: type, const, enum, required, properties, additionalProperties, items, minLength, minimum, $ref (by name, in this file). Decisions are closed (additionalProperties false): a field the server adds must be added here first, and synced to the SDKs.",
+  "schemas": {
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["decision"],
+        "properties": {"decision": {"type": "string", "minLength": 1}}
+      }
+    },
+    "decision.tool_call": {
+      "type": "object",
+      "required": ["action", "tool", "args", "call_id", "events"],
+      "additionalProperties": false,
+      "properties": {
+        "action": {"const": "tool_call"},
+        "tool": {"type": "string", "minLength": 1},
+        "args": {"type": "object"},
+        "call_id": {"type": "string", "minLength": 1},
+        "events": {"$ref": "events"}
+      }
+    },
+    "decision.say": {
+      "type": "object",
+      "required": ["action", "text", "events"],
+      "additionalProperties": false,
+      "properties": {
+        "action": {"const": "say"},
+        "text": {"type": "string", "minLength": 1},
+        "events": {"$ref": "events"}
+      }
+    },
+    "decision.forward": {
+      "type": "object",
+      "required": ["action", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "action": {"const": "forward"},
+        "reason": {"type": "string", "minLength": 1},
+        "events": {"$ref": "events"}
+      }
+    },
+    "capture.result": {
+      "type": "object",
+      "required": ["kept", "dropped"],
+      "additionalProperties": false,
+      "properties": {
+        "kept": {"type": "integer", "minimum": 0},
+        "dropped": {"type": "integer", "minimum": 0}
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["error"],
+      "additionalProperties": false,
+      "properties": {"error": {"type": "string", "minLength": 1}}
+    },
+    "health": {
+      "type": "object",
+      "required": ["ok"],
+      "additionalProperties": false,
+      "properties": {"ok": {"const": true}}
+    }
+  }
+}

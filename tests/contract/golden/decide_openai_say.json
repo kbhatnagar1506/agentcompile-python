@@ -1,0 +1,107 @@
+{
+  "name": "decide_openai_say",
+  "about": "A known job, no identity yet: the runtime asks for it.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/decide",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test",
+      "x-agentcompiler-deadline-ms": "5000",
+      "x-agentcompiler-conversation": "golden-1"
+    },
+    "body": {
+      "provider": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are acme's retail support agent."
+          },
+          {
+            "role": "user",
+            "content": "Please cancel my order with the desk lamp."
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "find_user_id_by_email",
+              "description": "find user id by email",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "find_user_id_by_name_zip",
+              "description": "find user id by name zip",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "get_user_details",
+              "description": "get user details",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "get_order_details",
+              "description": "get order details",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "cancel_pending_order",
+              "description": "cancel pending order",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "schema": "decision.say",
+    "expect": {
+      "action": "say",
+      "text": "To find your account, could you tell me your email?"
+    },
+    "example": {
+      "action": "say",
+      "text": "To find your account, could you tell me your email?",
+      "events": [
+        {
+          "decision": "activate_recipe"
+        },
+        {
+          "decision": "ask",
+          "field": "identity:0"
+        }
+      ]
+    }
+  }
+}

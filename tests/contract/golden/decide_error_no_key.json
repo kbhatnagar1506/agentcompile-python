@@ -1,0 +1,92 @@
+{
+  "name": "decide_error_no_key",
+  "about": "No key and no company header: 400.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/decide",
+    "headers": {
+      "x-agentcompiler-conversation": "golden-1"
+    },
+    "body": {
+      "provider": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are acme's retail support agent."
+          },
+          {
+            "role": "user",
+            "content": "Cancel order #W1 please, my email is jo@example.com"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "find_user_id_by_email",
+              "description": "find user id by email",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "find_user_id_by_name_zip",
+              "description": "find user id by name zip",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "get_user_details",
+              "description": "get user details",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "get_order_details",
+              "description": "get order details",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "cancel_pending_order",
+              "description": "cancel pending order",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 400,
+    "schema": "error",
+    "expect": {},
+    "example": {
+      "error": "missing x-agentcompiler-company header or a valid x-agentcompiler-key"
+    }
+  }
+}

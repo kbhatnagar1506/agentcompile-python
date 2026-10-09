@@ -1,0 +1,33 @@
+{
+  "name": "outcome",
+  "about": "An outcome report (agentcompile.outcome(id, 'resolved')): kept.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/outcome",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test"
+    },
+    "body": {
+      "outcomes": [
+        {
+          "conversation_id": "golden-capture-1",
+          "outcome": "resolved",
+          "note": "refunded",
+          "timestamp": "2026-10-09T12:05:00+00:00"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "schema": "capture.result",
+    "expect": {
+      "kept": 1,
+      "dropped": 0
+    },
+    "example": {
+      "kept": 1,
+      "dropped": 0
+    }
+  }
+}

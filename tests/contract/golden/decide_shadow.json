@@ -1,0 +1,119 @@
+{
+  "name": "decide_shadow",
+  "about": "Shadow mode: the same decision; the server keeps no state for the conversation.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/decide",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test",
+      "x-agentcompiler-deadline-ms": "5000",
+      "x-agentcompiler-conversation": "golden-1",
+      "x-agentcompiler-mode": "shadow"
+    },
+    "body": {
+      "provider": "openai",
+      "request": {
+        "model": "gpt-4o-mini",
+        "messages": [
+          {
+            "role": "system",
+            "content": "You are acme's retail support agent."
+          },
+          {
+            "role": "user",
+            "content": "Cancel order #W1 please, my email is jo@example.com"
+          }
+        ],
+        "tools": [
+          {
+            "type": "function",
+            "function": {
+              "name": "find_user_id_by_email",
+              "description": "find user id by email",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "find_user_id_by_name_zip",
+              "description": "find user id by name zip",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "get_user_details",
+              "description": "get user details",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "get_order_details",
+              "description": "get order details",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          },
+          {
+            "type": "function",
+            "function": {
+              "name": "cancel_pending_order",
+              "description": "cancel pending order",
+              "parameters": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "schema": "decision.tool_call",
+    "expect": {
+      "action": "tool_call",
+      "tool": "find_user_id_by_email",
+      "args": {
+        "email": "jo@example.com"
+      }
+    },
+    "example": {
+      "action": "tool_call",
+      "tool": "find_user_id_by_email",
+      "args": {
+        "email": "jo@example.com"
+      },
+      "call_id": "6010387bc7be4bbb9747da90e5677b56",
+      "events": [
+        {
+          "decision": "activate_recipe"
+        },
+        {
+          "decision": "identify",
+          "tool": "find_user_id_by_email"
+        },
+        {
+          "decision": "emit_read",
+          "tool": "find_user_id_by_email"
+        }
+      ]
+    }
+  }
+}

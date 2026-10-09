@@ -1,0 +1,59 @@
+{
+  "name": "capture_batch",
+  "about": "A capture batch: one exchange kept, one record without a request dropped.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/capture",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test"
+    },
+    "body": {
+      "exchanges": [
+        {
+          "provider": "openai",
+          "conversation_id": "golden-capture-1",
+          "timestamp": "2026-10-09T12:00:00+00:00",
+          "request": {
+            "model": "gpt-4o-mini",
+            "messages": [
+              {
+                "role": "user",
+                "content": "hi"
+              }
+            ]
+          },
+          "response": {
+            "id": "chatcmpl-1",
+            "object": "chat.completion",
+            "choices": [
+              {
+                "index": 0,
+                "message": {
+                  "role": "assistant",
+                  "content": "Hello!"
+                },
+                "finish_reason": "stop"
+              }
+            ]
+          }
+        },
+        {
+          "provider": "openai",
+          "conversation_id": "x"
+        }
+      ]
+    }
+  },
+  "response": {
+    "status": 200,
+    "schema": "capture.result",
+    "expect": {
+      "kept": 1,
+      "dropped": 1
+    },
+    "example": {
+      "kept": 1,
+      "dropped": 1
+    }
+  }
+}

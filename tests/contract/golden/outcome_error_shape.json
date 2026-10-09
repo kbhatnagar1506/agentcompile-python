@@ -1,0 +1,25 @@
+{
+  "name": "outcome_error_shape",
+  "about": "An outcome body that isn't {outcomes: [...]}: 400.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/outcome",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test"
+    },
+    "body": {
+      "conversation_id": "golden-capture-1",
+      "outcome": "resolved",
+      "note": "refunded",
+      "timestamp": "2026-10-09T12:05:00+00:00"
+    }
+  },
+  "response": {
+    "status": 400,
+    "schema": "error",
+    "expect": {},
+    "example": {
+      "error": "body must be {\"outcomes\": [...]}"
+    }
+  }
+}

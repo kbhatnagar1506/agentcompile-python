@@ -1,0 +1,26 @@
+{
+  "name": "decide_forward_malformed_body",
+  "about": "A body that isn't JSON: forward, never a 5xx.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/decide",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test",
+      "x-agentcompiler-deadline-ms": "5000",
+      "x-agentcompiler-conversation": "golden-1"
+    },
+    "raw_body": "{not json"
+  },
+  "response": {
+    "status": 200,
+    "schema": "decision.forward",
+    "expect": {
+      "action": "forward",
+      "reason": "engine error"
+    },
+    "example": {
+      "action": "forward",
+      "reason": "engine error"
+    }
+  }
+}

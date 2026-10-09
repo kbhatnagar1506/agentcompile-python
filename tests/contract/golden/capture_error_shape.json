@@ -1,0 +1,49 @@
+{
+  "name": "capture_error_shape",
+  "about": "A capture body that isn't {exchanges: [...]}: 400.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/capture",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test"
+    },
+    "body": {
+      "exchange": {
+        "provider": "openai",
+        "conversation_id": "golden-capture-1",
+        "timestamp": "2026-10-09T12:00:00+00:00",
+        "request": {
+          "model": "gpt-4o-mini",
+          "messages": [
+            {
+              "role": "user",
+              "content": "hi"
+            }
+          ]
+        },
+        "response": {
+          "id": "chatcmpl-1",
+          "object": "chat.completion",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "Hello!"
+              },
+              "finish_reason": "stop"
+            }
+          ]
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 400,
+    "schema": "error",
+    "expect": {},
+    "example": {
+      "error": "body must be {\"exchanges\": [...]}"
+    }
+  }
+}

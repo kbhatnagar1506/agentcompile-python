@@ -1,0 +1,89 @@
+{
+  "name": "decide_anthropic_say",
+  "about": "The same, Anthropic-shaped.",
+  "request": {
+    "method": "POST",
+    "path": "/v1/decide",
+    "headers": {
+      "x-agentcompiler-key": "ack_acme.contract-test",
+      "x-agentcompiler-deadline-ms": "5000",
+      "x-agentcompiler-conversation": "golden-1"
+    },
+    "body": {
+      "provider": "anthropic",
+      "request": {
+        "model": "claude-haiku-4-5",
+        "system": "You are acme's retail support agent.",
+        "messages": [
+          {
+            "role": "user",
+            "content": "Please cancel my order with the desk lamp."
+          }
+        ],
+        "tools": [
+          {
+            "name": "find_user_id_by_email",
+            "description": "find user id by email",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "name": "find_user_id_by_name_zip",
+            "description": "find user id by name zip",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "name": "get_user_details",
+            "description": "get user details",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "name": "get_order_details",
+            "description": "get order details",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            }
+          },
+          {
+            "name": "cancel_pending_order",
+            "description": "cancel pending order",
+            "input_schema": {
+              "type": "object",
+              "properties": {}
+            }
+          }
+        ]
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "schema": "decision.say",
+    "expect": {
+      "action": "say",
+      "text": "To find your account, could you tell me your email?"
+    },
+    "example": {
+      "action": "say",
+      "text": "To find your account, could you tell me your email?",
+      "events": [
+        {
+          "decision": "activate_recipe"
+        },
+        {
+          "decision": "ask",
+          "field": "identity:0"
+        }
+      ]
+    }
+  }
+}

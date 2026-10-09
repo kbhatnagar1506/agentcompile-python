@@ -1,0 +1,19 @@
+{
+  "name": "health",
+  "about": "Up and serving (no key).",
+  "request": {
+    "method": "GET",
+    "path": "/health",
+    "headers": {}
+  },
+  "response": {
+    "status": 200,
+    "schema": "health",
+    "expect": {
+      "ok": true
+    },
+    "example": {
+      "ok": true
+    }
+  }
+}
