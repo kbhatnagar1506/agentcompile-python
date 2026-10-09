@@ -21,3 +21,45 @@ jobs:
       - run: pip install -e ".[dev]" ruff
       - run: ruff check src tests && ruff format --check src tests
       - run: pytest -q
+
+  # The SDK <-> server contract, end to end: the server repo's contract server (the real
+  # endpoint and engine, in-memory stores, fake models; no model calls) on 127.0.0.1, the
+  # vendored golden requests sent to it, and a wrapped openai client running a whole job:
+  # wrap -> decide -> tool call -> answer. The server repo is private: the job needs a read
+  # token for it in the AGENT_COMPILER_TOKEN secret, and skips its steps without one.
+  contract:
+    runs-on: ubuntu-latest
+    env:
+      HAS_TOKEN: ${{ secrets.AGENT_COMPILER_TOKEN != '' }}
+      AGENTCOMPILE_CONTRACT_URL: http://127.0.0.1:8791
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # the version comes from git tags
+      - if: env.HAS_TOKEN == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: kbhatnagar1506/agent-compiler
+          ref: ${{ vars.AGENT_COMPILER_REF || 'main' }}
+          token: ${{ secrets.AGENT_COMPILER_TOKEN }}
+          path: agent-compiler
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - if: env.HAS_TOKEN == 'true'
+        run: pip install uv && uv pip install --system -e "./agent-compiler[serve]" -e ".[dev]"
+      - name: Vendored contract matches the server
+        if: env.HAS_TOKEN == 'true'
+        run: AGENT_COMPILER_DIR=agent-compiler scripts/sync-contract.sh --check
+      - name: Start the contract server
+        if: env.HAS_TOKEN == 'true'
+        working-directory: agent-compiler
+        run: |
+          PYTHONPATH=src:. nohup python -m tests.contract.server --port 8791 > ../server.log 2>&1 &
+          for _ in $(seq 60); do curl -sf http://127.0.0.1:8791/health && exit 0; sleep 1; done
+          cat ../server.log; exit 1
+      - name: Contract and end-to-end tests against it
+        if: env.HAS_TOKEN == 'true'
+        run: pytest -q tests/test_contract.py
+      - if: failure()
+        run: cat server.log || true
