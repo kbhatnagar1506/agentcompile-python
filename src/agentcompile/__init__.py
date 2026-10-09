@@ -59,32 +59,43 @@ except ImportError:  # running from a source checkout that was never built
 DEFAULT_URL = "https://api.tryagentcompile.com"
 
 
+# Seconds a decision may take before the call fails open to the wrapped model. A voice
+# caller hears the wait; our decisions take 0.6 s at the median and 1.5 s at p90.
+CHAT_TIMEOUT = 5.0
+VOICE_TIMEOUT = 1.5
+
+
 def wrap(
     client: Any,
     *,
     key: str | None = None,
     base_url: str | None = None,
     mode: str = LIVE,
-    timeout: float = 5.0,
+    timeout: float | None = None,
     trail: str | bool | None = True,
     on_event: OnEvent | None = None,
     company: str | None = None,
     http_client: Any = None,
     capture: bool | None = None,
     scrub: bool = True,
+    voice: bool = False,
 ) -> Any:
     """Wrap an OpenAI- or Anthropic-style client; returns an object you use exactly like it.
 
     key: your AgentCompile key (or AGENTCOMPILE_KEY). base_url: AGENTCOMPILE_URL or the default.
     mode: "live" answers known jobs; "shadow" decides but always calls your model, so you can
-    see what it would have done. timeout: seconds to wait for a decision before failing open.
+    see what it would have done. timeout: seconds to wait for a decision before failing open
+    (default 5, or 1.5 with voice=True: a caller hears every second of waiting).
     trail: a path, True for ~/.agentcompile/trail.jsonl, or False. on_event: called per call.
     capture: send each call's request and answer to AgentCompile in the background, so it can
     find the jobs your agent repeats (opt-in; or AGENTCOMPILE_CAPTURE=1). Never slows a call.
     scrub: with capture, turn emails, cards, phones and account numbers into keyed tokens on
     this machine before anything is sent (default True; the key is AGENTCOMPILE_SCRUB_KEY or
     one created once in ~/.agentcompile/).
+    voice: the agent talks to callers (a voice agent); only sets the default timeout.
     """
+    if timeout is None:
+        timeout = VOICE_TIMEOUT if voice else CHAT_TIMEOUT
     settings = _settings(key, base_url, company, timeout, mode)
     the_trail = Trail(trail, on_event)
     _remember(settings)  # outcome() sends with the client wrapped last
